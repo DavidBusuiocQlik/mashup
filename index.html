@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Qlik Mashup with Message Listener</title>
+  <meta charset="UTF-8" />
+  <title>Qlik Cloud Mashup</title>
   <script src="https://q-likhack251-459898.us.qlikcloud.com/resources/assets/external/require.js"></script>
 </head>
 <body style="margin: 0; padding: 32px; font-family: sans-serif;">
@@ -10,80 +11,78 @@
   <div id="error-message" style="color: red; margin-top: 16px;"></div>
 
   <script>
+    const tenant = "q-likhack251-459898.us.qlikcloud.com";
+    const webIntegrationId = "458a485c626995e8a80a8bac9eb21ac1";
+    const appId = "03011cc2-27b2-4060-9570-1275ee044884";
+    const objectId = "rXtfDa";
+
     require.config({
-      baseUrl: "https://q-likhack251-459898.us.qlikcloud.com/resources"
+      baseUrl: `https://${tenant}/resources`,
     });
 
     function showError(msg) {
       document.getElementById("error-message").textContent = msg;
     }
 
-    // Check authentication before loading Qlik
-    fetch("https://q-likhack251-459898.us.qlikcloud.com/api/v1/users/me", {
-      credentials: "include",
-      headers: {
-        "qlik-web-integration-id": "458a485c626995e8a80a8bac9eb21ac1"
-      }
-    })
-    .then(res => {
-      if (res.status === 401) {
-        // Not authenticated, redirect to login
-        const webIntegrationId = "458a485c626995e8a80a8bac9eb21ac1";
-        const url = "https://q-likhack251-459898.us.qlikcloud.com/login?qlik-web-integration-id=" + webIntegrationId + "&returnto=" + encodeURIComponent(window.location.href);
-        window.location.href = url;
-        return Promise.reject("Not authenticated");
-      }
-      return res.json();
-    })
-    .then(user => {
-      console.log("Authenticated as:", user);
-      require(["js/qlik"], function (qlik) {
-        // Error handling for Qlik
-        qlik.on("error", function (error) {
-          console.error("Qlik error:", error);
-          showError("Qlik error: " + (error.message || error));
+    async function checkAuthAndInit() {
+      try {
+        const res = await fetch(`https://${tenant}/api/v1/users/me`, {
+          credentials: "include",
+          headers: {
+            "qlik-web-integration-id": webIntegrationId,
+          },
         });
 
-        // Open the app
-        const app = qlik.openApp("03011cc2-27b2-4060-9570-1275ee044884", {
-          host: "q-likhack251-459898.us.qlikcloud.com",
-          prefix: "/",
-          port: 443,
-          isSecure: true,
-          webIntegrationId: "458a485c626995e8a80a8bac9eb21ac1"
-        });
-
-        if (!app) {
-          console.error("Failed to open Qlik app. Check app ID and permissions.");
-          showError("Failed to open Qlik app. Check app ID and permissions.");
+        if (res.status === 401) {
+          const loginUrl = `https://${tenant}/login?qlik-web-integration-id=${webIntegrationId}&returnto=${encodeURIComponent(window.location.href)}`;
+          window.location.href = loginUrl;
           return;
         }
 
-        // Try to get the object and log errors if any
-        app.getObject("qs-object", "rXtfDa").catch(function(err) {
-          console.error("Failed to get Qlik object:", err);
-          showError("Failed to get Qlik object: " + (err.message || err));
-        });
+        const user = await res.json();
+        console.log("Authenticated as:", user);
 
-        // Listen for postMessage
-        window.addEventListener("message", (event) => {
-          if (event.data?.type === "account_ids_selected") {
-            const ids = event.data.accountIds || [];
-            console.log("Received Account_IDs via postMessage:", ids);
-            if (ids.length > 0) {
-              const field = app.field("Account_ID");
-              field.selectValues(ids.map(id => ({ qText: id })), false, false);
+        require(["js/qlik"], function (qlik) {
+          qlik.setOnError(function (error) {
+            console.error("Qlik error:", error);
+            showError("Qlik error: " + (error.message || error));
+          });
+
+          const app = qlik.openApp(appId, {
+            host: tenant,
+            prefix: "/",
+            port: 443,
+            isSecure: true,
+            webIntegrationId: webIntegrationId,
+          });
+
+          app.getObject("qs-object", objectId).catch(function (err) {
+            console.error("Failed to get object:", err);
+            showError("Failed to get Qlik object: " + (err.message || err));
+          });
+
+          // Listen for postMessage
+          window.addEventListener("message", (event) => {
+            if (event.data?.type === "account_ids_selected") {
+              const ids = event.data.accountIds || [];
+              console.log("Received Account_IDs via postMessage:", ids);
+              if (ids.length > 0) {
+                app.field("Account_ID").selectValues(
+                  ids.map((id) => ({ qText: id })),
+                  false,
+                  false
+                );
+              }
             }
-          }
+          });
         });
-      });
-    })
-    .catch(err => {
-      if (err !== "Not authenticated") {
-        console.error("Mashup initialization error:", err);
+      } catch (err) {
+        console.error("Mashup init error:", err);
         showError("Mashup initialization error: " + err);
       }
-    });
+    }
+
+    checkAuthAndInit();
   </script>
 </body>
 </html>
