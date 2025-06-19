@@ -14,6 +14,18 @@
     });
 
     require(["js/qlik"], function (qlik) {
+      // Error handling for Qlik
+      qlik.on("error", function (error) {
+        console.error("Qlik error:", error);
+        if (error.code === 16 || (error.message && error.message.includes("authentication"))) {
+          // Not authenticated, redirect to login
+          const webIntegrationId = "458a485c626995e8a80a8bac9eb21ac1";
+          const url = "https://q-likhack251-459898.us.qlikcloud.com/login?qlik-web-integration-id=" + webIntegrationId + "&returnto=" + encodeURIComponent(window.location.href);
+          window.location.href = url;
+        }
+      });
+
+      // Open the app
       const app = qlik.openApp("03011cc2-27b2-4060-9570-1275ee044884", {
         host: "q-likhack251-459898.us.qlikcloud.com",
         prefix: "/",
@@ -22,7 +34,15 @@
         webIntegrationId: "458a485c626995e8a80a8bac9eb21ac1"
       });
 
-      app.getObject("qs-object", "rXtfDa");
+      if (!app) {
+        console.error("Failed to open Qlik app. Check app ID and permissions.");
+        return;
+      }
+
+      // Try to get the object and log errors if any
+      app.getObject("qs-object", "rXtfDa").catch(function(err) {
+        console.error("Failed to get Qlik object:", err);
+      });
 
       // Listen for postMessage
       window.addEventListener("message", (event) => {
