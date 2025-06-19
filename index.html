@@ -2,9 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Qlik Cloud Mashup – Full Sheet Embed</title>
-  <!-- Load require.js FIRST from CDN -->
-  <script src="https://cdn.jsdelivr.net/gh/qlik-oss/requirejs@2.3.6/require.min.js"></script>
+  <title>Qlik Cloud Mashup – Auth Safe</title>
   <style>
     body {
       margin: 0;
@@ -26,7 +24,7 @@
   </style>
 </head>
 <body>
-  <h2>Qlik Sheet Embed</h2>
+  <h2>Qlik Sheet Embed (Auth Safe)</h2>
   <div id="selections"></div>
   <div id="qs-object"></div>
   <div id="error-message"></div>
@@ -35,35 +33,56 @@
     const tenant = "q-likhack251-459898.us.qlikcloud.com";
     const webIntegrationId = "458a485c626995e8a80a8bac9eb21ac1";
     const appId = "03011cc2-27b2-4060-9570-1275ee044884";
-    const sheetId = "rXtfDa"; // your sheet ID
+    const sheetId = "rXtfDa";
 
     function showError(msg) {
       document.getElementById("error-message").textContent = msg;
     }
 
-    async function initMashup() {
+    async function checkAuth() {
       try {
         const res = await fetch(`https://${tenant}/api/v1/users/me`, {
           credentials: "include",
-          headers: { "qlik-web-integration-id": webIntegrationId }
+          headers: {
+            "qlik-web-integration-id": webIntegrationId
+          }
         });
 
         if (res.status === 401) {
-          // Not authenticated, redirect to Qlik login
-          const loginUrl = `https://${tenant}/login?qlik-web-integration-id=${webIntegrationId}&returnto=${encodeURIComponent(window.location.href)}`;
-          window.location.href = loginUrl;
-          return;
+          // Redirect to login if not authenticated
+          window.location.href = `https://${tenant}/login?qlik-web-integration-id=${webIntegrationId}&returnto=${encodeURIComponent(window.location.href)}`;
+          return false;
         }
 
         const user = await res.json();
         console.log("Authenticated as:", user);
+        return true;
+      } catch (err) {
+        showError("Authentication check failed: " + err);
+        return false;
+      }
+    }
+
+    function loadRequireJs() {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "https://cdn.jsdelivr.net/gh/qlik-oss/requirejs@2.3.6/require.min.js";
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error("Failed to load require.js"));
+        document.head.appendChild(script);
+      });
+    }
+
+    async function initQlik() {
+      try {
+        await loadRequireJs();
 
         require.config({
           baseUrl: `https://${tenant}/resources`
         });
 
-        require(["js/qlik"], function (qlik) {
-          qlik.setOnError(function (error) {
+        require(["js/qlik"], (qlik) => {
+          qlik.setOnError(error => {
             console.error("Qlik error:", error);
             showError("Qlik error: " + (error.message || error));
           });
@@ -76,12 +95,12 @@
             webIntegrationId: webIntegrationId
           });
 
-          // Load selections toolbar (optional)
+          // Load selections toolbar
           app.getObject("selections", "CurrentSelections").catch(err => {
             console.warn("CurrentSelections not available:", err);
           });
 
-          // Load full sheet
+          // Load the full sheet
           app.getObject("qs-object", sheetId)
             .then(() => console.log("Sheet loaded successfully"))
             .catch(err => {
@@ -89,8 +108,8 @@
               showError("Failed to load Qlik sheet: " + (err.message || err));
             });
 
-          // Listen for postMessage to select account IDs
-          window.addEventListener("message", event => {
+          // Listen for postMessage to select Account_IDs
+          window.addEventListener("message", (event) => {
             if (event.data?.type === "account_ids_selected") {
               const ids = event.data.accountIds || [];
               console.log("Received Account_IDs via postMessage:", ids);
@@ -105,12 +124,16 @@
           });
         });
       } catch (err) {
-        console.error("Mashup init error:", err);
-        showError("Mashup initialization error: " + err);
+        showError("Error loading Qlik resources: " + err);
       }
     }
 
-    initMashup();
+    (async () => {
+      const isAuthenticated = await checkAuth();
+      if (isAuthenticated) {
+        await initQlik();
+      }
+    })();
   </script>
 </body>
 </html>
