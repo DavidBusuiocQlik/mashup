@@ -2,24 +2,40 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Qlik Cloud Mashup</title>
-  <!-- Load require.js from CDN -->
+  <title>Qlik Cloud Mashup – Full Sheet Embed</title>
+  <!-- Load require.js FIRST from CDN -->
   <script src="https://cdn.jsdelivr.net/gh/qlik-oss/requirejs@2.3.6/require.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 32px;
+      font-family: sans-serif;
+      background: #f9f9f9;
+    }
+    #selections {
+      height: 40px;
+      margin-bottom: 16px;
+    }
+    #qs-object {
+      height: 600px;
+    }
+    #error-message {
+      color: red;
+      margin-top: 16px;
+    }
+  </style>
 </head>
 <body>
-  <h2>Qlik Cloud Mash</h2>
-  <div id="qs-object" style="height: 600px;"></div>
-  <div id="error-message" style="color: red; margin-top: 16px;"></div>
+  <h2>Qlik Sheet Embed</h2>
+  <div id="selections"></div>
+  <div id="qs-object"></div>
+  <div id="error-message"></div>
 
   <script>
     const tenant = "q-likhack251-459898.us.qlikcloud.com";
     const webIntegrationId = "458a485c626995e8a80a8bac9eb21ac1";
     const appId = "03011cc2-27b2-4060-9570-1275ee044884";
-    const sheetId = "rXtfDa";
-
-    require.config({
-      baseUrl: `https://${tenant}/resources`
-    });
+    const sheetId = "rXtfDa"; // your sheet ID
 
     function showError(msg) {
       document.getElementById("error-message").textContent = msg;
@@ -29,12 +45,11 @@
       try {
         const res = await fetch(`https://${tenant}/api/v1/users/me`, {
           credentials: "include",
-          headers: {
-            "qlik-web-integration-id": webIntegrationId,
-          },
+          headers: { "qlik-web-integration-id": webIntegrationId }
         });
 
         if (res.status === 401) {
+          // Not authenticated, redirect to Qlik login
           const loginUrl = `https://${tenant}/login?qlik-web-integration-id=${webIntegrationId}&returnto=${encodeURIComponent(window.location.href)}`;
           window.location.href = loginUrl;
           return;
@@ -43,8 +58,12 @@
         const user = await res.json();
         console.log("Authenticated as:", user);
 
-        require(["js/qlik"], function(qlik) {
-          qlik.setOnError(function(error) {
+        require.config({
+          baseUrl: `https://${tenant}/resources`
+        });
+
+        require(["js/qlik"], function (qlik) {
+          qlik.setOnError(function (error) {
             console.error("Qlik error:", error);
             showError("Qlik error: " + (error.message || error));
           });
@@ -57,12 +76,21 @@
             webIntegrationId: webIntegrationId
           });
 
-          app.getObject("qs-object", sheetId).catch(function(err) {
-            console.error("Failed to load sheet:", err);
-            showError("Failed to load Qlik sheet: " + (err.message || err));
+          // Load selections toolbar (optional)
+          app.getObject("selections", "CurrentSelections").catch(err => {
+            console.warn("CurrentSelections not available:", err);
           });
 
-          window.addEventListener("message", (event) => {
+          // Load full sheet
+          app.getObject("qs-object", sheetId)
+            .then(() => console.log("Sheet loaded successfully"))
+            .catch(err => {
+              console.error("Failed to load sheet:", err);
+              showError("Failed to load Qlik sheet: " + (err.message || err));
+            });
+
+          // Listen for postMessage to select account IDs
+          window.addEventListener("message", event => {
             if (event.data?.type === "account_ids_selected") {
               const ids = event.data.accountIds || [];
               console.log("Received Account_IDs via postMessage:", ids);
