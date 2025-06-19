@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Qlik Cloud Mashup</title>
+  <title>Qlik Cloud Mashup – Full Sheet Embed</title>
   <script src="https://q-likhack251-459898.us.qlikcloud.com/resources/assets/external/require.js"></script>
 </head>
-<body style="margin: 0; padding: 32px; font-family: sans-serif;">
-  <h2>Qlik Mash</h2>
+<body style="margin: 0; padding: 32px; font-family: sans-serif; background: #f9f9f9;">
+  <h2 style="margin-bottom: 16px;">Qlik Sheet Embed</h2>
+  <div id="selections" style="height: 40px;"></div>
   <div id="qs-object" style="height: 600px;"></div>
   <div id="error-message" style="color: red; margin-top: 16px;"></div>
 
@@ -14,7 +15,7 @@
     const tenant = "q-likhack251-459898.us.qlikcloud.com";
     const webIntegrationId = "458a485c626995e8a80a8bac9eb21ac1";
     const appId = "03011cc2-27b2-4060-9570-1275ee044884";
-    const objectId = "rXtfDa";
+    const sheetId = "rXtfDa"; // ✅ This is your actual sheet ID
 
     require.config({
       baseUrl: `https://${tenant}/resources`,
@@ -24,7 +25,7 @@
       document.getElementById("error-message").textContent = msg;
     }
 
-    async function checkAuthAndInit() {
+    async function initMashup() {
       try {
         const res = await fetch(`https://${tenant}/api/v1/users/me`, {
           credentials: "include",
@@ -56,12 +57,18 @@
             webIntegrationId: webIntegrationId,
           });
 
-          app.getObject("qs-object", objectId).catch(function (err) {
-            console.error("Failed to get object:", err);
-            showError("Failed to get Qlik object: " + (err.message || err));
+          // Load selections toolbar
+          app.getObject("selections", "CurrentSelections").catch(function (err) {
+            console.error("Failed to load CurrentSelections:", err);
           });
 
-          // Listen for postMessage
+          // Load full sheet
+          app.getObject("qs-object", sheetId).catch(function (err) {
+            console.error("Failed to load sheet:", err);
+            showError("Failed to load Qlik sheet: " + (err.message || err));
+          });
+
+          // Listen for postMessage to select account IDs
           window.addEventListener("message", (event) => {
             if (event.data?.type === "account_ids_selected") {
               const ids = event.data.accountIds || [];
@@ -82,7 +89,7 @@
       }
     }
 
-    checkAuthAndInit();
+    initMashup();
   </script>
 </body>
 </html>
